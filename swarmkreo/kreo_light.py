@@ -1,0 +1,47 @@
+import sys,time,hid
+
+VID=0x258A; PID=0x010C
+
+PALETTE_HEX = "060a000001000002000000000000000000000000000000000000000000fef7f500ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffffff000000ff000000ffffff00ff00ff00ffffffffff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005aa500000000"
+
+def open_kreo():
+    for d in hid.enumerate(VID, PID):
+        if d.get("usage_page")==0xFF00 and d.get("interface_number")==1:
+            h=hid.device(); h.open_path(d["path"]); return h
+    raise SystemExit("Kreo Swarm vendor HID interface not found (usage_page 0xFF00, interface 1)")
+
+def bfromhex(s): return bytes.fromhex("".join(s.split()))
+
+def find_seed_offset(buf):
+    hdr=b"\x06\x0a\x00\x00\x01\x00\x00\x02"
+    p=buf.find(hdr)
+    if p<0: raise SystemExit("Not a 06 0A payload")
+    start=p+len(hdr)
+    for pat in (b"\xfe\xf7\xf5\x00", b"\x00\x00\x00\x00"):
+        q=buf.find(pat, start, start+128)
+        if q>=0: return q
+    for i in range(start, min(len(buf)-4, start+128)):
+        if buf[i+3]==0x00:
+            return i
+    raise SystemExit("Could not locate RGB seed offset")
+
+def set_rgb(payload, r,g,b):
+    buf=bytearray(payload)
+    off=find_seed_offset(buf)
+    buf[off:off+4]=bytes([r&0xff,g&0xff,b&0xff,0x00])
+    return bytes(buf)
+
+def main():
+    if len(sys.argv)!=4:
+        raise SystemExit("Usage: python3 kreo_light.py R G B   (0-255 each)")
+    r,g,b=map(int, sys.argv[1:4])
+    base=bfromhex(PALETTE_HEX)
+    patched=set_rgb(base,r,g,b)
+    h=open_kreo()
+    h.send_feature_report(patched)
+    time.sleep(0.05)
+    h.close()
+    print("OK")
+
+if __name__=="__main__":
+    main()
