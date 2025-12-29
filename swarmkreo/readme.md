@@ -20,7 +20,7 @@ It works by patching the RGB seed inside a known palette payload and then applyi
 - hidapi Python bindings
 
 ```bash
-pip install hid
+pip install hidapi
 ```
 
 > On Linux, you may need udev rules or root permissions to access HID devices.
